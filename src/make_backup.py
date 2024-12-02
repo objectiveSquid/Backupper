@@ -6,6 +6,7 @@ from shared import (
 )
 
 from typing import Any
+import multiprocessing.pool
 import subprocess
 import argparse
 import logging
@@ -29,6 +30,7 @@ def main(
     ignore_list_path: str | None,
     copy_exif: bool,
     copy_timestamps: bool,
+    threads: int,
 ) -> int:
     # parsing files
     if isinstance(backup_list_path, str):
@@ -69,19 +71,30 @@ def main(
         shutil.copy2(ignore_list_path, f"{meta_directory}/ignore.list")
 
     # actually copying files
-    for input_path, output_path in backup_list:
-        if os.path.isfile(input_path):
-            modified_copy(
-                ignore_list, input_path, output_path, copy_exif, copy_timestamps
-            )
-        else:
-            shutil.copytree(
-                input_path,
-                f"{files_directory}/{output_path}",
-                copy_function=lambda source, destination: modified_copy(
-                    ignore_list, source, destination, copy_exif, copy_timestamps
-                ),
-            )
+    with multiprocessing.pool.Pool(threads) as pool:
+        for input_path, output_path in backup_list:
+            if os.path.isfile(input_path):
+                pool.apply(
+                    modified_copy,
+                    args=[
+                        ignore_list,
+                        input_path,
+                        output_path,
+                        copy_exif,
+                        copy_timestamps,
+                    ],
+                )
+            else:
+                pool.apply(
+                    shutil.copytree,
+                    [input_path, f"{files_directory}/{output_path}"],
+                    kwds={
+                        "copy_function": lambda source, destination: modified_copy(
+                            ignore_list, source, destination, copy_exif, copy_timestamps
+                        )
+                    },
+                )
+        pool.join()
 
     return SUCCESS_RETURN_CODE
 
@@ -133,6 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dont_copy_timestamps", action="store_true", help="Do not copy timestamp data"
     )
+    parser.add_argument("--threads", type=int, default=1, help="Number of threads")
 
     args = parser.parse_args()
 
@@ -148,5 +162,6 @@ if __name__ == "__main__":
             args.ignore_list,
             not args.dont_copy_exif,
             not args.dont_copy_timestamps,
+            args.threads,
         )
     )

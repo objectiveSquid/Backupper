@@ -1,6 +1,7 @@
 from shared import parse_attributes_list, parse_backup_list, create_logger, EXIF_FORMATS
 
 from typing import Any
+import multiprocessing.pool
 import subprocess
 import argparse
 import logging
@@ -27,7 +28,9 @@ def flip_backup_list(
     return output
 
 
-def main(backup_directory: str, copy_exif: bool, copy_timestamp: bool) -> int:
+def main(
+    backup_directory: str, copy_exif: bool, copy_timestamp: bool, threads: int
+) -> int:
     # preperation
     files_directory = f"{backup_directory}/files"
     meta_directory = f"{backup_directory}/meta"
@@ -45,26 +48,33 @@ def main(backup_directory: str, copy_exif: bool, copy_timestamp: bool) -> int:
     attributes = parse_attributes_list(f"{meta_directory}/attributes.list")
 
     # actually copying files
-    for input_path, output_path in flipped_backup_list:
-        if os.path.isfile(input_path):
-            modified_copy(
-                input_path,
-                output_path,
-                copy_exif and not attributes.no_exif_data,
-                copy_timestamp and not attributes.no_timestamps,
-            )
-        else:
-            shutil.copytree(
-                input_path,
-                output_path,
-                copy_function=lambda source, destination: modified_copy(
-                    source,
-                    destination,
-                    copy_exif and not attributes.no_exif_data,
-                    copy_timestamp and not attributes.no_timestamps,
-                ),
-                dirs_exist_ok=True,
-            )
+    with multiprocessing.pool.Pool(threads) as pool:
+        for input_path, output_path in flipped_backup_list:
+            if os.path.isfile(input_path):
+                pool.apply(
+                    modified_copy,
+                    [
+                        input_path,
+                        output_path,
+                        copy_exif and not attributes.no_exif_data,
+                        copy_timestamp and not attributes.no_timestamps,
+                    ],
+                )
+            else:
+                pool.apply(
+                    shutil.copytree,
+                    [input_path, output_path],
+                    {
+                        "copy_function": lambda source, destination: modified_copy(
+                            source,
+                            destination,
+                            copy_exif and not attributes.no_exif_data,
+                            copy_timestamp and not attributes.no_timestamps,
+                        ),
+                        "dirs_exist_ok": True,
+                    },
+                )
+        pool.join()
 
     return SUCCESS_RETURN_CODE
 
@@ -105,6 +115,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dont_copy_timestamp", action="store_true", help="Do not copy timestamp data"
     )
+    parser.add_argument("--threads", type=int, default=1, help="Number of threads")
 
     args = parser.parse_args()
 
@@ -113,6 +124,9 @@ if __name__ == "__main__":
 
     exit(
         main(
-            args.backup_directory, not args.dont_copy_exif, not args.dont_copy_timestamp
+            args.backup_directory,
+            not args.dont_copy_exif,
+            not args.dont_copy_timestamp,
+            args.threads,
         )
     )
