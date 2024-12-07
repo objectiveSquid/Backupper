@@ -71,10 +71,10 @@ def main(
         shutil.copy2(ignore_list_path, f"{meta_directory}/ignore.list")
 
     # actually copying files
-    with multiprocessing.pool.Pool(threads) as pool:
+    with multiprocessing.pool.ThreadPool(threads) as pool:
         for input_path, output_path in backup_list:
             if os.path.isfile(input_path):
-                pool.apply(
+                pool.apply_async(
                     modified_copy,
                     args=[
                         ignore_list,
@@ -85,7 +85,7 @@ def main(
                     ],
                 )
             else:
-                pool.apply(
+                pool.apply_async(
                     shutil.copytree,
                     [input_path, f"{files_directory}/{output_path}"],
                     kwds={

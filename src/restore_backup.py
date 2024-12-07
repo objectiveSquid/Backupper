@@ -48,10 +48,10 @@ def main(
     attributes = parse_attributes_list(f"{meta_directory}/attributes.list")
 
     # actually copying files
-    with multiprocessing.pool.Pool(threads) as pool:
+    with multiprocessing.pool.ThreadPool(threads) as pool:
         for input_path, output_path in flipped_backup_list:
             if os.path.isfile(input_path):
-                pool.apply(
+                pool.apply_async(
                     modified_copy,
                     [
                         input_path,
@@ -61,7 +61,7 @@ def main(
                     ],
                 )
             else:
-                pool.apply(
+                pool.apply_async(
                     shutil.copytree,
                     [input_path, output_path],
                     {
