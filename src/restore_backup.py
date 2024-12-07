@@ -74,6 +74,8 @@ def main(
                         "dirs_exist_ok": True,
                     },
                 )
+
+        pool.close()
         pool.join()
 
     return SUCCESS_RETURN_CODE

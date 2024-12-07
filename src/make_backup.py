@@ -94,6 +94,8 @@ def main(
                         )
                     },
                 )
+
+        pool.close()
         pool.join()
 
     return SUCCESS_RETURN_CODE
